@@ -1,0 +1,8 @@
+{
+  "code": 0,
+  "msg": "success",
+  "data": {
+    "sid": "app-session-sid-abcdef",
+    "push_alias": "alias-000111222"
+  }
+}

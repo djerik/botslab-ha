@@ -1,0 +1,141 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Botslab Doorbell",
+        "description": "Sign in with your Botslab app account.",
+        "data": {
+          "email": "Email",
+          "password": "Password",
+          "region": "Region"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Botslab Doorbell",
+        "description": "Re-enter the password for {email}.",
+        "data": {
+          "password": "Password"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Invalid email or password.",
+      "cannot_connect": "Failed to connect to the Botslab cloud."
+    },
+    "abort": {
+      "already_configured": "This account is already configured.",
+      "reauth_successful": "Re-authentication was successful."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Botslab options",
+        "data": {
+          "poll_interval": "State poll interval (seconds)",
+          "enable_mqtt": "Enable realtime push (recommended)",
+          "device_sn_filter": "Only this device serial (optional)"
+        },
+        "data_description": {
+          "poll_interval": "How often to refresh battery/status. Rings arrive instantly via push.",
+          "enable_mqtt": "Persistent push connection for instant ring/motion events (no polling)."
+        }
+      }
+    }
+  },
+  "device_automation": {
+    "trigger_type": {
+      "ring": "Someone rang the doorbell",
+      "motion": "Motion detected",
+      "person": "Person detected",
+      "pet": "Pet detected",
+      "package": "Package detected",
+      "vehicle": "Vehicle detected"
+    }
+  },
+  "selector": {
+    "region": {
+      "options": {
+        "eu1": "Europe (eu1)",
+        "eu2": "Europe (eu2)",
+        "na1": "North America (na1)",
+        "ap1": "Asia-Pacific (ap1)"
+      }
+    }
+  },
+  "entity": {
+    "event": {
+      "doorbell": {
+        "name": "Doorbell",
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "ring": "Ring",
+              "motion": "Motion",
+              "person": "Person",
+              "pet": "Pet",
+              "package": "Package",
+              "vehicle": "Vehicle"
+            }
+          }
+        }
+      }
+    },
+    "binary_sensor": {
+      "online": {
+        "name": "Online"
+      },
+      "low_power": {
+        "name": "Low power mode"
+      },
+      "sd_card": {
+        "name": "SD card"
+      },
+      "battery_pack": {
+        "name": "Battery pack"
+      },
+      "chime": {
+        "name": "Mechanical chime"
+      }
+    },
+    "image": {
+      "last_snapshot": {
+        "name": "Last snapshot"
+      }
+    },
+    "sensor": {
+      "battery": {
+        "name": "Battery"
+      },
+      "voltage": {
+        "name": "Voltage"
+      },
+      "sd_free": {
+        "name": "SD free space"
+      },
+      "last_event": {
+        "name": "Last event"
+      },
+      "last_event_time": {
+        "name": "Last event time"
+      },
+      "sd_total": {
+        "name": "SD total space"
+      },
+      "adc_current": {
+        "name": "Charge current"
+      },
+      "power_supply": {
+        "name": "Power supply"
+      },
+      "sd_used": {
+        "name": "SD used space"
+      }
+    },
+    "camera": {
+      "live": {
+        "name": "Live view"
+      }
+    }
+  }
+}

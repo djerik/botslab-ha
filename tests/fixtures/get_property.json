@@ -1,0 +1,15 @@
+{
+  "code": 0,
+  "msg": "success",
+  "data": {
+    "report": [
+      {"identifier": "BatteryLevel", "value": 87},
+      {"identifier": "DoorbellVoltage", "value": 4120},
+      {"identifier": "LowPowerMode", "value": false},
+      {"identifier": "DoorbellOnlineState", "value": true},
+      {"identifier": "SdState", "value": 1},
+      {"identifier": "SdStorage", "value": "31914983424,20000000000,11914983424"}
+    ],
+    "desired": []
+  }
+}

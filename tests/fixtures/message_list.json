@@ -1,0 +1,41 @@
+{
+  "code": 0,
+  "msg": "success",
+  "data": {
+    "items": [
+      {
+        "id": "msg-1003",
+        "tdata": {
+          "event_type": "app.event.post.Answer",
+          "device_name": "SN0123456789ABCDEF",
+          "title": "Someone rang the doorbell",
+          "ctime": 1720000300,
+          "image": {"url": "https://oss.example/snap-1003.jpg", "encrypt": "none"},
+          "video": {"url": "aliyun://bucket/clip-1003.m3u8", "secretkey": "abc123", "encrypt": "chacha2"}
+        }
+      },
+      {
+        "id": "msg-1002",
+        "tdata": {
+          "event_type": "dsl.event.post.HumanPass",
+          "device_name": "SN0123456789ABCDEF",
+          "title": "Person detected",
+          "ctime": 1720000200,
+          "image": {"url": "https://oss.example/snap-1002.jpg", "encrypt": "none"},
+          "video": {"url": "", "encrypt": "none"}
+        }
+      },
+      {
+        "id": "msg-1001",
+        "tdata": {
+          "event_type": "dsl.event.post.Unknownable",
+          "device_name": "SN0123456789ABCDEF",
+          "title": "Unmapped event",
+          "ctime": 1720000100,
+          "image": {"url": "https://oss.example/snap-1001.jpg", "encrypt": "aes"},
+          "video": {"url": "", "encrypt": "none"}
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# Test / tooling
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.venv/
+venv/
+
+# Secrets — never commit tokens or credentials
+secrets.json
+*.local.json
+
+# Local development notes — kept locally, not shipped
+docs/
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/

@@ -1,0 +1,32 @@
+[project]
+name = "botslab-ha"
+version = "0.1.0"
+description = "Home Assistant custom integration for Botslab / 360 Video Doorbell"
+readme = "README.md"
+requires-python = ">=3.13"
+license = { text = "MIT" }
+
+[tool.ruff]
+target-version = "py313"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "C4", "SIM", "PL", "RUF", "ASYNC", "S"]
+# PLR0913/PLR0917: API/transport clients legitimately take many (positional) params.
+# RUF012: HA reads `_attr_*` as overridable class attributes (mutable-default is idiomatic).
+ignore = ["PLR0913", "PLR0917", "RUF012"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S101", "PLR2004", "S105", "S106", "S324", "SLF001"]
+# The live transport implements a binary wire protocol: header offsets and result codes are
+# compared inline (PLR2004), the signing secrets are protocol constants (S105), and the handful
+# of HTTPS calls use urllib with hardcoded https URLs (S310).
+"custom_components/botslab/live/*" = ["PLR2004", "S105", "S310"]
+
+[tool.ruff.lint.isort]
+force-sort-within-sections = true
+combine-as-imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

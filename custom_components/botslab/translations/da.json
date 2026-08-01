@@ -1,0 +1,141 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Botslab Dørklokke",
+        "description": "Log ind med din Botslab-app-konto.",
+        "data": {
+          "email": "E-mail",
+          "password": "Adgangskode",
+          "region": "Region"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Botslab Dørklokke",
+        "description": "Indtast adgangskoden igen for {email}.",
+        "data": {
+          "password": "Adgangskode"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Forkert e-mail eller adgangskode.",
+      "cannot_connect": "Kunne ikke oprette forbindelse til Botslab-skyen."
+    },
+    "abort": {
+      "already_configured": "Denne konto er allerede konfigureret.",
+      "reauth_successful": "Genindlogningen lykkedes."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Botslab-indstillinger",
+        "data": {
+          "poll_interval": "Status-opdaterings-interval (sekunder)",
+          "enable_mqtt": "Aktivér realtids-push (anbefales)",
+          "device_sn_filter": "Kun denne enheds-serie (valgfrit)"
+        },
+        "data_description": {
+          "poll_interval": "Hvor ofte batteri/status opdateres. Ring kommer øjeblikkeligt via push.",
+          "enable_mqtt": "Persistent push-forbindelse til øjeblikkelige ring/bevægelses-events (ingen polling)."
+        }
+      }
+    }
+  },
+  "selector": {
+    "region": {
+      "options": {
+        "eu1": "Europa (eu1)",
+        "eu2": "Europa (eu2)",
+        "na1": "Nordamerika (na1)",
+        "ap1": "Asien-Stillehavet (ap1)"
+      }
+    }
+  },
+  "device_automation": {
+    "trigger_type": {
+      "ring": "Nogen ringede på dørklokken",
+      "motion": "Bevægelse registreret",
+      "person": "Person registreret",
+      "pet": "Kæledyr registreret",
+      "package": "Pakke registreret",
+      "vehicle": "Køretøj registreret"
+    }
+  },
+  "entity": {
+    "event": {
+      "doorbell": {
+        "name": "Dørklokke",
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "ring": "Ringning",
+              "motion": "Bevægelse",
+              "person": "Person",
+              "pet": "Kæledyr",
+              "package": "Pakke",
+              "vehicle": "Køretøj"
+            }
+          }
+        }
+      }
+    },
+    "binary_sensor": {
+      "online": {
+        "name": "Online"
+      },
+      "low_power": {
+        "name": "Strømsparetilstand"
+      },
+      "sd_card": {
+        "name": "SD-kort"
+      },
+      "battery_pack": {
+        "name": "Batteripakke"
+      },
+      "chime": {
+        "name": "Mekanisk gong"
+      }
+    },
+    "image": {
+      "last_snapshot": {
+        "name": "Seneste snapshot"
+      }
+    },
+    "sensor": {
+      "battery": {
+        "name": "Batteri"
+      },
+      "voltage": {
+        "name": "Spænding"
+      },
+      "sd_free": {
+        "name": "SD ledig plads"
+      },
+      "last_event": {
+        "name": "Seneste hændelse"
+      },
+      "last_event_time": {
+        "name": "Seneste hændelses-tidspunkt"
+      },
+      "sd_total": {
+        "name": "SD samlet plads"
+      },
+      "adc_current": {
+        "name": "Ladestrøm"
+      },
+      "power_supply": {
+        "name": "Strømforsyning"
+      },
+      "sd_used": {
+        "name": "SD brugt plads"
+      }
+    },
+    "camera": {
+      "live": {
+        "name": "Live"
+      }
+    }
+  }
+}

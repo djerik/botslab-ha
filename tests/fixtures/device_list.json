@@ -1,0 +1,17 @@
+{
+  "code": 0,
+  "msg": "success",
+  "data": {
+    "devices": [
+      {
+        "product_key": "a1B2c3D4e5",
+        "device_name": "SN0123456789ABCDEF",
+        "device_title": "Front Door",
+        "product_name": "Video Doorbell X3",
+        "online_status": "online",
+        "category_key": "doorbell",
+        "roles": "owner"
+      }
+    ]
+  }
+}
