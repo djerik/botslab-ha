@@ -132,6 +132,7 @@ class BotslabApi:
         self.t = t
         self.sid = sid
         self.push_alias = ""  # QPush routing key, from app_login
+        self.uid = ""  # account user id (from app_login) — the live substream's real userid
 
     @property
     def session(self) -> ClientSession:
@@ -191,6 +192,12 @@ class BotslabApi:
         data = (await self._call(EP_APP_LOGIN, {}, method="POST")).get("data", {})
         self.sid = str(data.get("sid") or data.get("home_sid") or "")
         self.push_alias = str(data.get("push_alias") or self.push_alias)
+        raw_uid = str(data.get("uid") or data.get("userid") or data.get("user_id")
+                      or data.get("qid") or self.uid)
+        # The app's connect_priv/substream sends the BARE numeric account uid (e.g.
+        # 1000100000000014903); app_login returns it prefixed ("botslab_<digits>"). Strip the
+        # prefix so /substream's userid matches the app byte-for-byte.
+        self.uid = raw_uid.split("_", 1)[-1] if raw_uid.startswith("botslab_") else raw_uid
         if not self.sid:
             raise BotslabSessionError("app_login returned no sid")
         return self.sid

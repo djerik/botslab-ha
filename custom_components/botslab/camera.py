@@ -47,7 +47,7 @@ async def async_setup_entry(
         manager = LiveStreamManager(
             hass, ffmpeg_bin, region=region, product_key=device.product_key,
             sn=device.device_name, m2=m2,
-            session_provider=lambda: (api.q, api.t, api.sid))
+            session_provider=lambda: (api.q, api.t, api.sid, api.uid))
         entry.async_on_unload(manager.async_stop)
         entities.append(BotslabCamera(coordinator, device, manager))
     async_add_entities(entities)

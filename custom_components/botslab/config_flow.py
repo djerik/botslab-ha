@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+import logging
 from typing import Any
 
 from homeassistant.config_entries import ConfigFlow, ConfigFlowResult, OptionsFlow
@@ -40,6 +41,8 @@ from .const import (
 )
 from .models import BotslabConfigEntry
 from .quc_login import async_login
+
+_LOGGER = logging.getLogger(__name__)
 
 _PASSWORD_SELECTOR = TextSelector(TextSelectorConfig(type=TextSelectorType.PASSWORD))
 
@@ -103,7 +106,8 @@ class BotslabConfigFlow(ConfigFlow, domain=DOMAIN):
                 )
             except BotslabAuthError:
                 errors["base"] = "invalid_auth"
-            except BotslabError:
+            except BotslabError as err:
+                _LOGGER.warning("Botslab login failed (cannot connect) — %s", err)
                 errors["base"] = "cannot_connect"
             else:
                 await self.async_set_unique_id(data[CONF_QID] or data[CONF_EMAIL])

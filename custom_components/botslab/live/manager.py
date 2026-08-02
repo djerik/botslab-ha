@@ -59,10 +59,15 @@ _FFMPEG_ARGS = (
 )
 
 _IDLE_GRACE = 25.0  # seconds with no client before tearing the engine down (spares the battery)
+# Floor on the gap between frames written to ffmpeg (50 fps). Paces post-gap catch-up smoothly.
+_MIN_WRITE_INTERVAL = 0.02
 # How long stream_source waits for the first MPEG-TS bytes before handing the URL over anyway.
-# Long enough that a warm re-open (media already flowing) still returns a proven-live stream, short
-# enough that a cold wake reaches the frontend quickly — see async_get_stream_source.
-_FIRST_MEDIA_HINT = 2.5
+# It returns the instant media flows (a warm re-open is ~1s), but on a COLD open the battery
+# doorbell must be woken first (~5-7s to the first keyframe); handing HA the URL before ffmpeg is
+# producing makes its decoder connect to a silent stream and give up ("Immediate exit requested"),
+# so the first open shows nothing while a re-open works. Waiting for real media here covers the
+# wake so even the first open plays. Well under HA's own ~30s stream-source timeout.
+_FIRST_MEDIA_HINT = 8.0
 _READ_CHUNK = 65536
 
 _HTTP_CLIENT_TIMEOUT = ClientTimeout(total=_HTTP_TIMEOUT)
@@ -128,6 +133,8 @@ class LiveStreamManager:
         self._engine_future: asyncio.Future | None = None
         self._ff: asyncio.subprocess.Process | None = None
         self._pump_task: asyncio.Task | None = None
+        self._pace_task: asyncio.Task | None = None
+        self._pace_q: asyncio.Queue[tuple[bytes, int]] | None = None
         self._server: asyncio.Server | None = None
         self._port = 0
         self._clients: set[asyncio.StreamWriter] = set()
@@ -136,16 +143,18 @@ class LiveStreamManager:
 
     # ------------------------------------------------------------------ public
     async def async_get_stream_source(self) -> str:
-        """Start the session and return the local MPEG-TS URL, briefly waiting for media first.
+        """Start the session and return the local MPEG-TS URL once media is flowing.
 
-        Blocking here until ffmpeg emits bytes is what stopped Home Assistant's ``av.open()``
-        timing out during the doorbell's cold wake (the "Immediate exit requested" failures). But
-        the frontend cannot draw a player until it has a URL, so blocking for the whole wake left
-        the card showing a bare snapshot with no controls for several seconds.
+        Blocking here until ffmpeg emits bytes is what stops Home Assistant's ``av.open()`` from
+        connecting to a still-silent stream and giving up ("Immediate exit requested"). That was
+        the "first open shows nothing, a re-open works" symptom: on a cold open the battery
+        doorbell must be woken (~5-7s to the first keyframe), and handing HA the URL before then
+        made its decoder probe an empty stream and bail.
 
-        The wait is therefore capped: a warm re-open still returns a stream that is provably live,
-        while a cold wake hands the URL over early and lets the player show its own loading state
-        as the stream fills in. The local server accepts the connection immediately either way.
+        So the wait is generous (``_FIRST_MEDIA_HINT``): it returns the instant media flows — a warm
+        re-open is ~1s — but a cold open holds the URL back until the wake completes so even the
+        first view plays. The player shows its own loading state meanwhile; the cap stays well under
+        HA's own stream-source timeout so a genuinely offline device still fails cleanly, not hangs.
 
         Safe to block at all because the WebRTC provider is disabled (see camera.py), so nothing
         calls this eagerly at entity setup — only a real viewer does. The engine is torn down
@@ -156,13 +165,12 @@ class LiveStreamManager:
             if self._server is None:
                 self._server = await asyncio.start_server(self._on_client, "127.0.0.1", 0)
                 self._port = self._server.sockets[0].getsockname()[1]
-            if not self._running:
-                await self._start_locked()
+            await self._ensure_engine_locked()
         try:
             await asyncio.wait_for(self._first_media.wait(), timeout=_FIRST_MEDIA_HINT)
         except TimeoutError:
-            # Still waking. Hand the URL over regardless so the frontend can draw a player; the
-            # engine keeps warming and the bytes reach the client as soon as the device publishes.
+            # Wake took longer than the cap (slow network, or the device is offline). Hand the URL
+            # over anyway; the engine keeps warming and bytes reach the client if it does publish.
             _LOGGER.debug("live %s: no media yet after %.1fs, returning URL while it warms",
                           self._sn, _FIRST_MEDIA_HINT)
         except asyncio.CancelledError:
@@ -188,19 +196,39 @@ class LiveStreamManager:
             self._clients.clear()
 
     # ------------------------------------------------------------------ start
+    async def _ensure_engine_locked(self) -> None:
+        """Start the engine, or restart it if a previous run has since exited.
+
+        The engine runs in an executor and its future stays pending for the whole session; when it
+        completes, setup exhausted its retries or the stream loop ended. Nothing else resets
+        ``_running`` on that path, so without this a re-open would hand HA a URL backed by a dead
+        engine until the 25s idle teardown — the "first open shows nothing, and a quick retry still
+        fails" case. Reaping the finished run here lets a retry restart cleanly. Must hold the lock.
+        """
+        if self._running and self._engine_future is not None and self._engine_future.done():
+            await self._stop_engine_locked()  # reap the dead run's ffmpeg/tasks before restarting
+        if not self._running:
+            await self._start_locked()
+
     async def _start_locked(self) -> None:
         self._first_media = asyncio.Event()
         self._ff = await asyncio.create_subprocess_exec(
             self._ffmpeg_bin, *_FFMPEG_ARGS,
             stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.DEVNULL)
+            stderr=asyncio.subprocess.PIPE)
         self._pump_task = self._hass.async_create_background_task(
             self._pump_ffmpeg(), name=f"botslab_live_pump_{self._sn}")
+        self._hass.async_create_background_task(
+            self._pump_stderr(self._ff), name=f"botslab_live_stderr_{self._sn}")
+        self._pace_q = asyncio.Queue(maxsize=90)  # ~6s cap; typical depth is one burst (~1s)
+        self._pace_task = self._hass.async_create_background_task(
+            self._pace_ffmpeg(), name=f"botslab_live_pace_{self._sn}")
 
-        q, t, sid = self._session_provider()
+        q, t, sid, uid = self._session_provider()
         engine = LiveEngine(
-            q=q, t=t, sid=sid, region=self._region, product_key=self._product_key, sn=self._sn,
-            m2=self._m2, on_h264=self._sink, ffmpeg_bin=self._ffmpeg_bin, http=self._http)
+            q=q, t=t, sid=sid, uid=uid, region=self._region, product_key=self._product_key,
+            sn=self._sn, m2=self._m2, on_h264=self._sink, ffmpeg_bin=self._ffmpeg_bin,
+            http=self._http)
         self._engine = engine
         self._engine_future = self._hass.loop.run_in_executor(None, self._run_engine, engine)
         self._running = True
@@ -219,9 +247,55 @@ class LiveStreamManager:
             _LOGGER.warning("live engine for %s stopped: %s", self._sn, err)
 
     # --------------------------------------------------------------- data flow
-    def _sink(self, chunk: bytes) -> None:
-        """Engine-thread callback: hand H.264 to the event loop for ffmpeg's stdin."""
-        self._hass.loop.call_soon_threadsafe(self._write_ffmpeg, chunk)
+    def _sink(self, chunk: bytes, ts_ms: int) -> None:
+        """Engine-thread callback: queue one Annex-B access unit (with its device capture timestamp)
+        for paced delivery to ffmpeg."""
+        self._hass.loop.call_soon_threadsafe(self._enqueue, chunk, ts_ms)
+
+    def _enqueue(self, chunk: bytes, ts_ms: int) -> None:
+        q = self._pace_q
+        if q is None:
+            return
+        if q.full():  # sustained overrun — drop the oldest frame to keep latency bounded
+            with contextlib.suppress(asyncio.QueueEmpty):
+                q.get_nowait()
+        with contextlib.suppress(asyncio.QueueFull):
+            q.put_nowait((chunk, ts_ms))
+
+    async def _pace_ffmpeg(self) -> None:
+        """Release queued access units to ffmpeg on the cadence of their device capture timestamps.
+
+        The cloud relay delivers frames in bursts (many within a few ms, then a gap), but each frame
+        carries a steady ~15 fps capture timestamp. Writing them out on that clock — rather than as
+        they arrive — feeds ffmpeg evenly spaced input, so ``-use_wallclock_as_timestamps`` yields
+        smooth PTS and the picture stops stuttering/flickering. After a real gap the pacer catches
+        up (writes the backlog quickly) to stay near-live, and re-anchors on a timestamp jump.
+        """
+        loop = self._hass.loop
+        ref_ts: int | None = None
+        ref_wall = 0.0
+        last_write = 0.0
+        try:
+            while True:
+                chunk, ts_ms = await self._pace_q.get()
+                if ref_ts is None:
+                    ref_ts, ref_wall = ts_ms, loop.time()
+                dt = (ts_ms - ref_ts) / 1000.0
+                if dt < 0.0 or dt > 2.0:  # wrap/reset/backwards/long stall — re-anchor
+                    ref_ts, ref_wall = ts_ms, loop.time()
+                    dt = 0.0
+                # Cap the write rate so a post-gap catch-up drains the backlog smoothly (spread over
+                # frames) instead of in one burst that would re-introduce the stutter.
+                target = max(ref_wall + dt, last_write + _MIN_WRITE_INTERVAL)
+                delay = target - loop.time()
+                if delay > 0.002:
+                    await asyncio.sleep(min(delay, 0.5))
+                last_write = loop.time()
+                self._write_ffmpeg(chunk)
+        except asyncio.CancelledError:
+            raise
+        except Exception as err:  # never let a pacing glitch kill the stream
+            _LOGGER.debug("live pace task ended for %s: %s", self._sn, err)
 
     def _write_ffmpeg(self, chunk: bytes) -> None:
         ff = self._ff
@@ -251,6 +325,18 @@ class LiveStreamManager:
         except Exception as err:
             _LOGGER.debug("live ffmpeg pump ended for %s: %s", self._sn, err)
 
+    async def _pump_stderr(self, ff: asyncio.subprocess.Process) -> None:
+        """Log ffmpeg's stderr so a bad H.264 stream (why the picture is blank) is visible."""
+        if ff.stderr is None:
+            return
+        with contextlib.suppress(Exception):
+            while True:
+                line = await ff.stderr.readline()
+                if not line:
+                    break
+                _LOGGER.warning("live %s ffmpeg: %s", self._sn,
+                                line.decode("utf-8", "replace").rstrip())
+
     def _broadcast(self, chunk: bytes) -> None:
         for writer in list(self._clients):
             try:
@@ -260,10 +346,8 @@ class LiveStreamManager:
 
     async def _on_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         self._cancel_idle()
-        if not self._running:  # reconnect after an idle teardown — bring the engine back up
-            async with self._lock:
-                if not self._running:
-                    await self._start_locked()
+        async with self._lock:  # (re)start if idle-torn-down or a prior run has since died
+            await self._ensure_engine_locked()
         self._clients.add(writer)
         _LOGGER.info("live %s: consumer connected (%d total), engine warming up",
                      self._sn, len(self._clients))
@@ -305,15 +389,17 @@ class LiveStreamManager:
         if self._engine_future is not None:
             with contextlib.suppress(Exception):
                 await asyncio.wait_for(asyncio.shield(self._engine_future), timeout=5)
-        if self._pump_task is not None:
-            self._pump_task.cancel()
-            with contextlib.suppress(asyncio.CancelledError, Exception):
-                await self._pump_task
+        for task in (self._pump_task, self._pace_task):
+            if task is not None:
+                task.cancel()
+                with contextlib.suppress(asyncio.CancelledError, Exception):
+                    await task
         if self._ff is not None:
             with contextlib.suppress(ProcessLookupError, OSError):
                 self._ff.terminate()
             with contextlib.suppress(Exception):
                 await asyncio.wait_for(self._ff.wait(), timeout=5)
         self._engine = self._engine_future = self._pump_task = self._ff = None
+        self._pace_task = self._pace_q = None
         self._running = False
         self._notify_state(False)

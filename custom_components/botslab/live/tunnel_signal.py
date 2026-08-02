@@ -17,11 +17,14 @@ from __future__ import annotations
 import contextlib
 import hashlib
 import json
+import logging
 import secrets
 import socket
 import struct
 import time
 import uuid as _uuid
+
+_LOGGER = logging.getLogger(__name__)
 
 MAGIC = bytes.fromhex("8009000020160518")
 
@@ -54,7 +57,9 @@ def _wrap(path: int, typ: int, conv: int, payload: bytes) -> bytes:
     return MAGIC + b"\x00" * 8 + struct.pack(">H", len(body) + 2) + body
 
 
-def uuid_field(uuid: str, chan: int = 2) -> bytes:
+def uuid_field(uuid: str, chan: int = 3) -> bytes:
+    # channel 3: the reference tunnel.py build_connect defaults to 3, and a live frida capture of
+    # the app's working live-open shows every tunnel message uses "<machineId>_3" (HA used _2).
     b = f"{uuid}_{chan}".encode()
     return b + b"\x00" * (40 - len(b))
 
@@ -125,12 +130,17 @@ class TunnelSignal:
         return c
 
     def _sendall(self, frame: bytes) -> None:
+        cmd = int.from_bytes(frame[18:20], "big")
+        # 0x0231 is the per-packet signalling ack; the device floods res_pub_stream_result, so
+        # acking each would swamp the log. Skip it (and the full hex) to keep the log readable.
+        if cmd != 0x0231:
+            _LOGGER.debug("tunnel OUT cmd=%#06x len=%d", cmd, len(frame))
         for s in self.servers:
             self.sock.sendto(frame, s)
 
     def open(self) -> None:
         raw = (bytes.fromhex("070000000100002719000107")
-               + (self.uuid + "_2").encode() + b"\x00\x00" + bytes.fromhex("0107")
+               + (self.uuid + "_3").encode() + b"\x00\x00" + bytes.fromhex("0107")
                + f"{self.product_id}/{self.sn}".encode() + b"\x00" * 25)
         self._sendall(_wrap(0x03, 0x01, self._next(), raw))
 
@@ -140,7 +150,9 @@ class TunnelSignal:
     def connect(self) -> bool:
         payload = self._uf + self._rf + bytes.fromhex("0000010000000000")
         for s in self.servers:
-            self.sock.sendto(_wrap(0x02, 0x04, self._next(), payload), s)
+            frame = _wrap(0x02, 0x04, self._next(), payload)
+            _LOGGER.debug("tunnel OUT cmd=0x0204 len=%d", len(frame))
+            self.sock.sendto(frame, s)
         got = False
         for _ in range(len(self.servers) * 2):
             try:
