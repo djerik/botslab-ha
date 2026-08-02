@@ -50,7 +50,12 @@ def test_rc4_known_answer() -> None:
 
 # --------------------------------------------------- signalling envelope crypto
 def test_transfer_token_round_trip() -> None:
-    """transfer_token (rotating key, algo:1) decrypts back to a req_relay inner with our uSign."""
+    """transfer_token (rotating key, algo:1) decrypts back to a req_relay inner with an empty token.
+
+    The token MUST be empty: the app's viewer/subscribe path sends token="" and gets video, whereas
+    a non-empty uSign (the publish path) made the device publish audio-only to us. See
+    ``LiveEngine._transfer_token``.
+    """
     eng = _engine()
     env = json.loads(eng._transfer_token())
     assert env["index"] == 3583
@@ -58,7 +63,7 @@ def test_transfer_token_round_trip() -> None:
     assert "bc" not in env  # rotating-key regime carries no bc field
     inner = json.loads(eng._decrypt_device(env))
     assert inner["type"] == "req_relay"
-    assert inner["token"] == eng._usign
+    assert inner["token"] == ""
     assert inner["publish_sn"] == "SN0123456789ABCDEF_01_01"
 
 
