@@ -37,6 +37,7 @@ class BotslabDevice:
     online: bool
     category_key: str
     roles: str
+    online_status: str = ""  # raw device-list online_status string ("online"/"offline"/"")
     raw: dict[str, Any] = field(default_factory=dict)
     props: dict[str, Any] = field(default_factory=dict)  # device shadow (battery, settings...)
 
@@ -121,9 +122,18 @@ class BotslabDevice:
 
     @property
     def online_state(self) -> bool:
-        """Prefer the live shadow online flag, else the device-list status."""
+        """Device connectivity, matched to the app's signal icon = cloud reachability via the hub.
+
+        The device-list ``online_status`` is that signal. The shadow's ``DoorbellOnlineState`` does
+        NOT track connectivity and must not be used for it: it stays ``true`` when the hub drops
+        (the device's own stale self-report, so it can't say "I'm offline") and flips ``false`` when
+        the battery unit merely sleeps — giving both false "connected" and false "disconnected". Use
+        it only as a last resort when the device list carries no status string at all.
+        """
+        if self.online_status:
+            return self.online
         val = self.props.get(PROP_ONLINE)
-        return bool(val) if val is not None else self.online
+        return bool(val) if val is not None else True
 
     @classmethod
     def from_api(cls, data: dict[str, Any]) -> BotslabDevice:
@@ -133,6 +143,7 @@ class BotslabDevice:
             device_name=str(data.get("device_name", "")),
             device_title=str(data.get("device_title") or data.get("product_name") or "Botslab"),
             online=str(data.get("online_status", "")).lower() == "online",
+            online_status=str(data.get("online_status", "")),
             category_key=str(data.get("category_key", "")),
             roles=str(data.get("roles", "")),
             raw=data,

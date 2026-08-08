@@ -98,8 +98,14 @@ class BotslabBinarySensor(BotslabEntity, BinarySensorEntity):
 
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
-        """Expose the full device shadow (all settings) on the connectivity sensor."""
+        """Expose the full device shadow (all settings) on the connectivity sensor, plus the raw
+        device-list ``online_status`` (the cloud broker's connection view) so its value is visible
+        alongside the shadow's self-reported ``DoorbellOnlineState``."""
         if self.entity_description.key != "online":
             return None
         device = self.device
-        return dict(device.props) if device and device.props else None
+        if device is None:
+            return None
+        attrs: dict[str, Any] = dict(device.props)
+        attrs["_device_list_online_status"] = device.online_status or "(absent)"
+        return attrs or None
